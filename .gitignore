@@ -1,0 +1,13 @@
+# Ambiente e segredos
+.env
+.env.*
+!.env.example
+# Dados gerados (backups, mídia, logs, QR de pareamento)
+data/
+backups/
+logs/
+*.log
+qr.png
+__pycache__/
+*.pyc
+.DS_Store

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entrar · Atendimento WhatsApp · Empresa Exemplo</title>
+<link rel="icon" href="/img/PLACEHOLDER-FAVICON.png">
+<meta name="robots" content="noindex">
+<style>
+:root{--bg:#EEF2F1;--card:#fff;--ink:#1C2A30;--muted:#5D6B72;--line:#DDE3E1;--accent:#1e3a8a;--accent-ink:#fff;--crit:#B42318;--crit-bg:#FCEBE9;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#0F1518;--card:#182126;--ink:#E4EBEA;--muted:#98A7AD;--line:#2A373C;--accent:#93c5fd;--accent-ink:#0D1A17;--crit:#F28B82;--crit-bg:#3A2220;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--ink);font:15px/1.5 "IBM Plex Sans",system-ui,sans-serif;padding:16px}
+.box{width:100%;max-width:380px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:28px 26px;box-shadow:0 4px 18px rgba(16,24,28,.08)}
+.box img{height:30px;display:block;margin:0 auto 18px}
+h1{font-size:18px;margin:0 0 4px;text-align:center}
+p.s{margin:0 0 20px;text-align:center;color:var(--muted);font-size:14px}
+label{display:block;font-size:13px;font-weight:600;margin:12px 0 5px}
+input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:transparent;color:inherit;font:inherit}
+input:focus{outline:2px solid var(--accent);outline-offset:1px}
+button{width:100%;margin-top:18px;padding:11px;border:0;border-radius:9px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600;cursor:pointer}
+.err{background:var(--crit-bg);color:var(--crit);border-radius:8px;padding:8px 12px;font-size:13.5px;margin-bottom:6px}
+.f{margin-top:16px;text-align:center;font-size:12.5px;color:var(--muted)}
+.f a{color:var(--muted)}
+</style>
+</head>
+<body>
+<main class="box">
+  <img src="/img/PLACEHOLDER-LOGO.png" alt="Empresa Exemplo" onerror="this.outerHTML='<b style=&quot;font-size:20px;letter-spacing:.02em&quot;>exemplo</b>'">
+  <h1>Atendimento WhatsApp</h1>
+  <p class="s">Acesso restrito. Entre para continuar.</p>
+  <div id="erro" class="err" hidden></div>
+  <form method="post" action="/whatsapp/api/login" id="f">
+    <input type="hidden" name="next" id="next" value="/whatsapp/mensagens/">
+    <label for="u">Usuário</label>
+    <input id="u" name="usuario" value="admin" autocomplete="username" readonly>
+    <label for="senha">Senha</label>
+    <input id="senha" name="senha" type="password" autocomplete="current-password" required autofocus>
+    <button type="submit">Entrar</button>
+  </form>
+  <div class="f">Você permanece conectado por 30 dias neste aparelho.<br><a href="/whatsapp/">← Voltar ao WhatsApp</a></div>
+</main>
+<script>
+const q = new URLSearchParams(location.search), e = q.get('erro');
+if (e) { const b = document.getElementById('erro'); b.hidden = false; b.textContent = e === '2' ? 'Muitas tentativas. Aguarde alguns minutos.' : 'Senha incorreta. Tente novamente.'; }
+const n = q.get('next'); if (n && n.startsWith('/whatsapp/') && !n.includes('//')) document.getElementById('next').value = n;
+</script>
+</body>
+</html>

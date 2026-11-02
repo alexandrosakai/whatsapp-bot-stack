@@ -1,0 +1,265 @@
+{
+ "id": "wa-tarefas",
+ "name": "WA - Tarefas (checklist por WhatsApp)",
+ "nodes": [
+  {
+   "id": "d7f068cb-af25-45ad-9d70-dd7974d28953",
+   "name": "A cada minuto",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    60
+   ],
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "minutes",
+       "minutesInterval": 1
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ce5f382f-7107-416b-ade4-b7bdf65b40cd",
+   "name": "Envia checklists do dia",
+   "type": "n8n-nodes-base.postgres",
+   "typeVersion": 2.8,
+   "position": [
+    300,
+    0
+   ],
+   "parameters": {
+    "operation": "executeQuery",
+    "query": "SELECT tarefa_enviar_hoje(t.id) AS exec\nFROM tasks t JOIN contacts c ON c.id=t.contato_id AND c.ativo\nWHERE t.ativo AND (now() AT TIME ZONE 'America/Sao_Paulo')::date >= t.inicio AND (t.fim IS NULL OR (now() AT TIME ZONE 'America/Sao_Paulo')::date <= t.fim)\n  AND extract(isodow FROM (now() AT TIME ZONE 'America/Sao_Paulo'))::int = ANY(t.dias)\n  AND (now() AT TIME ZONE 'America/Sao_Paulo')::time >= t.hora_envio AND (now() AT TIME ZONE 'America/Sao_Paulo')::time < t.lembrar_ate\n  AND NOT EXISTS (SELECT 1 FROM task_runs e WHERE e.tarefa_id=t.id AND e.data=(now() AT TIME ZONE 'America/Sao_Paulo')::date)",
+    "options": {}
+   },
+   "credentials": {
+    "postgres": {
+     "id": "cred-wa-db",
+     "name": "wa-db"
+    }
+   }
+  },
+  {
+   "id": "94a5c5bc-8965-40f0-8e13-00a1af893387",
+   "name": "Lembretes a verificar",
+   "type": "n8n-nodes-base.postgres",
+   "typeVersion": 2.8,
+   "position": [
+    300,
+    140
+   ],
+   "parameters": {
+    "operation": "executeQuery",
+    "query": "SELECT e.id AS exec_id, t.checklist, t.nome_checklist, e.data::text AS desde, e.token\nFROM task_runs e JOIN tasks t ON t.id=e.tarefa_id JOIN contacts c ON c.id=t.contato_id AND c.ativo\nWHERE e.status='pendente' AND t.ativo AND e.envios >= 1\n  AND NOT EXISTS (SELECT 1 FROM send_queue f WHERE f.numero=c.numero AND f.status='pendente' AND f.texto LIKE '%' || e.token || '%')\n  AND (\n    -- lembretes durante o dia (só se a tarefa tiver intervalo definido; 0 = só o aviso diário)\n    (t.lembrar_cada_min > 0 AND e.data = (now() AT TIME ZONE 'America/Sao_Paulo')::date AND now() - e.ultimo_envio >= make_interval(mins => t.lembrar_cada_min) AND (now() AT TIME ZONE 'America/Sao_Paulo')::time < t.lembrar_ate)\n    OR\n    -- ocorrência antiga ainda pendente e hoje não é dia de nova ocorrência: cobra uma vez por dia na hora do envio\n    (e.data < (now() AT TIME ZONE 'America/Sao_Paulo')::date AND NOT (extract(isodow FROM (now() AT TIME ZONE 'America/Sao_Paulo'))::int = ANY(t.dias))\n       AND (e.ultimo_envio AT TIME ZONE 'America/Sao_Paulo')::date < (now() AT TIME ZONE 'America/Sao_Paulo')::date AND (now() AT TIME ZONE 'America/Sao_Paulo')::time >= t.hora_envio AND (now() AT TIME ZONE 'America/Sao_Paulo')::time < t.lembrar_ate)\n  )",
+    "options": {}
+   },
+   "credentials": {
+    "postgres": {
+     "id": "cred-wa-db",
+     "name": "wa-db"
+    }
+   }
+  },
+  {
+   "id": "e8fe8d46-6854-43bc-ac9e-3f840ec35e73",
+   "name": "Checklist foi preenchido?",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.5,
+   "position": [
+    560,
+    140
+   ],
+   "parameters": {
+    "method": "GET",
+    "url": "={{ $env.CHECKLIST_URL + 'api/interno/concluido?cid=' + $json.checklist + '&desde=' + $json.desde + '&nome=' + encodeURIComponent($json.nome_checklist) + '&token=' + $json.token }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "X-Interno",
+       "value": "={{ $env.CHECKLIST_INTERNO }}"
+      }
+     ]
+    },
+    "options": {
+     "timeout": 20000
+    }
+   },
+   "onError": "continueErrorOutput"
+  },
+  {
+   "id": "34f59926-57ea-4b97-82ce-99edeb69fb49",
+   "name": "Junta",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    820,
+    140
+   ],
+   "parameters": {
+    "mode": "runOnceForEachItem",
+    "jsCode": "const e = $('Lembretes a verificar').item.json;\nreturn {json: {...e, concluido: !!$input.item.json.concluido}};"
+   }
+  },
+  {
+   "id": "c6ffa359-08a0-4d3e-b2ae-03b9908faa4c",
+   "name": "Já preencheu?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    1080,
+    140
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "0b04f8b4-24e4-4716-b9e4-44e3f33d2725",
+       "leftValue": "={{ $json.concluido }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "15816aa5-6350-4808-9dad-94086aae4297",
+   "name": "Conclui e parabeniza",
+   "type": "n8n-nodes-base.postgres",
+   "typeVersion": 2.8,
+   "position": [
+    1340,
+    80
+   ],
+   "parameters": {
+    "operation": "executeQuery",
+    "query": "SELECT tarefa_concluir($1) AS exec",
+    "options": {
+     "queryReplacement": "={{ [$json.exec_id] }}"
+    }
+   },
+   "credentials": {
+    "postgres": {
+     "id": "cred-wa-db",
+     "name": "wa-db"
+    }
+   }
+  },
+  {
+   "id": "0818a983-e406-4002-9a1c-a57161269d61",
+   "name": "Envia lembrete",
+   "type": "n8n-nodes-base.postgres",
+   "typeVersion": 2.8,
+   "position": [
+    1340,
+    220
+   ],
+   "parameters": {
+    "operation": "executeQuery",
+    "query": "SELECT tarefa_lembrar($1) AS exec",
+    "options": {
+     "queryReplacement": "={{ [$json.exec_id] }}"
+    }
+   },
+   "credentials": {
+    "postgres": {
+     "id": "cred-wa-db",
+     "name": "wa-db"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "A cada minuto": {
+   "main": [
+    [
+     {
+      "node": "Envia checklists do dia",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Lembretes a verificar",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Lembretes a verificar": {
+   "main": [
+    [
+     {
+      "node": "Checklist foi preenchido?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Checklist foi preenchido?": {
+   "main": [
+    [
+     {
+      "node": "Junta",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    []
+   ]
+  },
+  "Junta": {
+   "main": [
+    [
+     {
+      "node": "Já preencheu?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Já preencheu?": {
+   "main": [
+    [
+     {
+      "node": "Conclui e parabeniza",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Envia lembrete",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "active": false,
+ "settings": {
+  "executionOrder": "v1",
+  "timezone": "America/Sao_Paulo",
+  "saveDataSuccessExecution": "none"
+ }
+}

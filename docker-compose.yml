@@ -1,0 +1,121 @@
+name: wa-stack
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    mem_limit: 300m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 20
+
+  evolution:
+    image: evoapicloud/evolution-api:latest
+    restart: unless-stopped
+    depends_on:
+      postgres: {condition: service_healthy}
+    ports: ["127.0.0.1:8085:8080"]
+    environment:
+      SERVER_URL: ${EVOLUTION_PUBLIC_URL:-http://127.0.0.1:8085}
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/evolution?schema=public
+      DATABASE_CONNECTION_CLIENT_NAME: evolution
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
+      DATABASE_SAVE_MESSAGE_UPDATE: "true"
+      DATABASE_SAVE_DATA_CONTACTS: "true"
+      DATABASE_SAVE_DATA_CHATS: "true"
+      CACHE_REDIS_ENABLED: "false"
+      CACHE_LOCAL_ENABLED: "true"
+      LOG_LEVEL: ERROR,WARN
+      DEL_INSTANCE: "false"
+      QRCODE_LIMIT: "30"
+      CONFIG_SESSION_PHONE_CLIENT: Empresa Exemplo
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      - evo_instances:/evolution/instances
+    mem_limit: 900m
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    restart: unless-stopped
+    depends_on:
+      postgres: {condition: service_healthy}
+    ports: ["127.0.0.1:5678:5678"]
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: postgres
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      WEBHOOK_URL: ${N8N_PUBLIC_URL:-http://127.0.0.1:5678/}
+      N8N_SECURE_COOKIE: ${N8N_SECURE_COOKIE:-false}
+      N8N_PROXY_HOPS: "1"
+      GENERIC_TIMEZONE: ${TZ:-America/Sao_Paulo}
+      TZ: ${TZ:-America/Sao_Paulo}
+      N8N_RESTRICT_FILE_ACCESS_TO: /files
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: "168"
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      EVOLUTION_URL: ${EVOLUTION_URL:-http://evolution:8080}
+      EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-bot}
+      ANTHROPIC_URL: ${ANTHROPIC_URL:-https://api.anthropic.com}
+      WHISPER_URL: ${WHISPER_URL:-http://whisper:9000}
+      CHECKLIST_URL: ${CHECKLIST_URL}
+      CHECKLIST_INTERNO: ${CHECKLIST_INTERNO}
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./data:/files
+      - ./workflows:/import:ro
+    mem_limit: 700m
+
+  whisper:
+    build: ./whisper
+    restart: unless-stopped
+    environment:
+      WHISPER_MODEL: small
+    volumes:
+      - whisper_models:/models
+    mem_limit: 1200m
+
+  painel:
+    build: ./painel
+    restart: unless-stopped
+    depends_on:
+      postgres: {condition: service_healthy}
+      evolution: {condition: service_started}
+    ports: ["127.0.0.1:8110:8110"]
+    environment:
+      EVOLUTION_URL: http://evolution:8080
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
+      EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-bot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PAINEL_SENHA: ${N8N_OWNER_PASSWORD}
+      PAINEL_SEGREDO: ${PAINEL_SEGREDO}
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      - painel_midia:/data
+      - ./data/resumos:/resumos:ro
+    mem_limit: 300m
+
+volumes:
+  painel_midia:
+  pgdata:
+  evo_instances:
+  n8n_data:
+  whisper_models:

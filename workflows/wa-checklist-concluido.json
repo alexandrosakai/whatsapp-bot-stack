@@ -1,0 +1,89 @@
+{
+ "id": "wa-checklist-concluido",
+ "name": "WA - Checklist concluído (aviso do app)",
+ "nodes": [
+  {
+   "id": "d916a424-c2fb-4ba7-909b-c24f481541b6",
+   "name": "Webhook",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2.2,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "checklist-concluido",
+    "responseMode": "onReceived",
+    "options": {}
+   },
+   "webhookId": "904f4d22-9c87-46b6-9366-e1294074fbd3"
+  },
+  {
+   "id": "d4c999bf-b5d9-466d-a111-5aa9f699e516",
+   "name": "Valida",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    260,
+    0
+   ],
+   "parameters": {
+    "jsCode": "\nconst it = $input.first().json;\nif (((it.headers || {})['x-interno'] || '') !== $env.CHECKLIST_INTERNO) return [];\nconst b = it.body || {};\nreturn [{json: {token: String(b.token || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 64), cid: String(b.cid || ''), nome: String(b.nome || '')}}];\n"
+   }
+  },
+  {
+   "id": "c8a12dac-fc71-4a6e-bfc6-bdc5d6ee8105",
+   "name": "Conclui a tarefa",
+   "type": "n8n-nodes-base.postgres",
+   "typeVersion": 2.8,
+   "position": [
+    520,
+    0
+   ],
+   "parameters": {
+    "operation": "executeQuery",
+    "query": "SELECT tarefa_concluir_por_envio($1,$2,$3) AS exec",
+    "options": {
+     "queryReplacement": "={{ [$json.token, $json.cid, $json.nome] }}"
+    }
+   },
+   "credentials": {
+    "postgres": {
+     "id": "cred-wa-db",
+     "name": "wa-db"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "Webhook": {
+   "main": [
+    [
+     {
+      "node": "Valida",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Valida": {
+   "main": [
+    [
+     {
+      "node": "Conclui a tarefa",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "active": false,
+ "settings": {
+  "executionOrder": "v1",
+  "timezone": "America/Sao_Paulo",
+  "saveDataSuccessExecution": "none"
+ }
+}

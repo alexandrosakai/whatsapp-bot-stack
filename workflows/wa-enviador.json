@@ -1,0 +1,195 @@
+{
+ "id": "wa-enviador",
+ "name": "WA - Enviador",
+ "nodes": [
+  {
+   "id": "755ad101-bd5b-4fa6-9f30-6a8211d938d9",
+   "name": "A cada 20 s",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "seconds",
+       "secondsInterval": 20
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "c93d6f5d-402c-474c-8d96-ac5c0a4ba2e9",
+   "name": "Pega próxima da fila",
+   "type": "n8n-nodes-base.postgres",
+   "typeVersion": 2.8,
+   "position": [
+    260,
+    0
+   ],
+   "parameters": {
+    "operation": "executeQuery",
+    "query": "WITH cfg AS (SELECT (SELECT valor::int FROM config WHERE chave='gap_min_s') AS gmin,\n                    (SELECT valor::int FROM config WHERE chave='max_dia') AS maxdia,\n                    (SELECT valor::time FROM config WHERE chave='janela_ini') AS ini,\n                    (SELECT valor::time FROM config WHERE chave='janela_fim') AS fim,\n                    (SELECT valor FROM config WHERE chave='rodape') AS rodape),\nfalhas AS (UPDATE send_queue SET status='erro' WHERE status='pendente' AND tentativas >= 3 AND liberar_em <= now() RETURNING id),\npode AS (\n  SELECT 1 FROM cfg WHERE (now() AT TIME ZONE 'America/Sao_Paulo')::time BETWEEN ini AND fim\n   AND (SELECT count(*) FROM send_queue WHERE status='enviado' AND enviado_em >= (date_trunc('day', now() AT TIME ZONE 'America/Sao_Paulo') AT TIME ZONE 'America/Sao_Paulo')) < maxdia\n   AND COALESCE((SELECT max(enviado_em) FROM send_queue WHERE status='enviado') < now() - make_interval(secs => gmin), true)\n),\nprox AS (SELECT id FROM send_queue WHERE status='pendente' AND tentativas < 3 AND liberar_em <= now() AND EXISTS (SELECT 1 FROM pode)\n         ORDER BY liberar_em, id LIMIT 1 FOR UPDATE SKIP LOCKED)\nUPDATE send_queue f SET tentativas = tentativas + 1, liberar_em = now() + interval '5 minutes'\nFROM prox, cfg WHERE f.id = prox.id\nRETURNING f.id, f.numero, f.texto, COALESCE(f.rodape, cfg.rodape) AS rodape",
+    "options": {}
+   },
+   "credentials": {
+    "postgres": {
+     "id": "cred-wa-db",
+     "name": "wa-db"
+    }
+   }
+  },
+  {
+   "id": "60662cd0-848b-4e4e-ac34-d0985ad40a94",
+   "name": "Monta mensagem",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    520,
+    0
+   ],
+   "parameters": {
+    "jsCode": "\nconst j = $input.first().json;\nif (!j.id || !j.numero || !j.texto) return [];            // fila vazia: o n8n devolve um item vazio, nunca enviar\nconst delay = 2500 + Math.floor(Math.random() * 4500);     // simula \"digitando…\" (2,5 a 7 s)\nreturn [{json: {id: j.id, body: {number: j.numero, text: j.rodape ? j.texto + '\\n\\n' + j.rodape : j.texto, delay}}}];\n"
+   }
+  },
+  {
+   "id": "cfcb811a-0c08-4b92-8788-a358f8374d4a",
+   "name": "Envia WhatsApp",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.5,
+   "position": [
+    780,
+    0
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.EVOLUTION_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "apikey",
+       "value": "={{ $env.EVOLUTION_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.body) }}",
+    "options": {
+     "timeout": 45000
+    }
+   },
+   "onError": "continueErrorOutput"
+  },
+  {
+   "id": "80ced1d9-3a6d-4ab4-bb71-a25a0674b096",
+   "name": "Marca enviado",
+   "type": "n8n-nodes-base.postgres",
+   "typeVersion": 2.8,
+   "position": [
+    1040,
+    -60
+   ],
+   "parameters": {
+    "operation": "executeQuery",
+    "query": "UPDATE send_queue SET status='enviado', enviado_em=now(), erro=NULL WHERE id=$1",
+    "options": {
+     "queryReplacement": "={{ [$('Monta mensagem').first().json.id] }}"
+    }
+   },
+   "credentials": {
+    "postgres": {
+     "id": "cred-wa-db",
+     "name": "wa-db"
+    }
+   }
+  },
+  {
+   "id": "ed3e3857-2871-48d8-b21e-5fc3e92e7ba6",
+   "name": "Registra erro",
+   "type": "n8n-nodes-base.postgres",
+   "typeVersion": 2.8,
+   "position": [
+    1040,
+    80
+   ],
+   "parameters": {
+    "operation": "executeQuery",
+    "query": "UPDATE send_queue SET erro=$2 WHERE id=$1",
+    "options": {
+     "queryReplacement": "={{ [$('Monta mensagem').first().json.id, String(($json.error && ($json.error.message || $json.error)) || 'falha no envio').slice(0, 300)] }}"
+    }
+   },
+   "credentials": {
+    "postgres": {
+     "id": "cred-wa-db",
+     "name": "wa-db"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "A cada 20 s": {
+   "main": [
+    [
+     {
+      "node": "Pega próxima da fila",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Pega próxima da fila": {
+   "main": [
+    [
+     {
+      "node": "Monta mensagem",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Monta mensagem": {
+   "main": [
+    [
+     {
+      "node": "Envia WhatsApp",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Envia WhatsApp": {
+   "main": [
+    [
+     {
+      "node": "Marca enviado",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Registra erro",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "active": false,
+ "settings": {
+  "executionOrder": "v1",
+  "timezone": "America/Sao_Paulo",
+  "saveDataSuccessExecution": "none"
+ }
+}

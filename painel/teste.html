@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Teste de conexão · Empresa Exemplo</title>
+<meta name="robots" content="noindex">
+<style>
+body{margin:0;background:#eef2f1;color:#1c2a30;font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif;padding:20px}
+@media (prefers-color-scheme:dark){body{background:#0f1518;color:#e4ebea}th{background:#1d282d!important}td,th{border-color:#2a373c!important}table{background:#182126!important}}
+h1{font-size:20px;margin:0 0 4px}p{margin:4px 0 14px;color:#5d6b72}
+button{border:0;background:#1e3a8a;color:#fff;border-radius:8px;padding:9px 18px;font:inherit;font-weight:600;cursor:pointer;margin-bottom:14px}
+table{border-collapse:collapse;width:100%;max-width:1100px;background:#fff;border-radius:10px;overflow:hidden}
+td,th{padding:7px 10px;border-bottom:1px solid #dde3e1;text-align:left;font-size:13px;vertical-align:top;word-break:break-all}
+th{background:#f6f8f7;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+.ok{color:#1f7a45;font-weight:600}.bad{color:#b42318;font-weight:600}
+#info{font-size:12.5px;color:#5d6b72;max-width:1100px;word-break:break-all;margin-top:12px}
+</style>
+</head>
+<body>
+<h1>Teste de conexão</h1>
+<p>Roda verificações no seu navegador e mostra o que ele recebe do servidor. Faça login em <a href="/whatsapp/mensagens/">Mensagens</a> antes, para testar as APIs.</p>
+<button id="go">Executar de novo</button>
+<table><thead><tr><th>Teste</th><th>Resultado</th><th>Status</th><th>Bytes</th><th>ms</th><th>Protocolo</th><th>Origem / servidor / via</th><th>Erro</th></tr></thead><tbody id="t"></tbody></table>
+<div id="info"></div>
+<script>
+const SONDAS = [
+  ['Página (HTML)', '/whatsapp/entrar/'],
+  ['Imagem logo (fetch)', '/img/PLACEHOLDER-LOGO.png'],
+  ['Imagem favicon (fetch)', '/img/PLACEHOLDER-FAVICON.png'],
+  ['API saúde', '/whatsapp/api/saude'],
+  ['API resumo', '/whatsapp/api/resumo'],
+  ['API contatos', '/whatsapp/api/contatos?q='],
+];
+if (location.hostname.startsWith('app.')) SONDAS.push(['Outra API (checklist)', '/checklist/api/catalogo']);   // o checklist só existe em app.example.com
+const tb = document.getElementById('t');
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function sonda(nome, url) {
+  const t0 = performance.now(), r = {nome, url};
+  try {
+    const x = await fetch(url, {cache: 'no-store', credentials: 'same-origin'});
+    const buf = await x.arrayBuffer();
+    r.status = x.status; r.ok = x.ok; r.bytes = buf.byteLength;
+    if (!x.ok) { const txt = new TextDecoder().decode(buf); const tit = (txt.match(/<title[^>]*>([^<]*)/i) || [])[1] || '';
+      const limpo = txt.replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      const links = (txt.match(/https?:\/\/[^\s"'<>)]{4,120}/g) || []).filter(u => !/w3\.org|fonts\.|\.woff|\.css/.test(u)).slice(0, 4).join(' ; ');
+      r.corpo = (tit ? 'TÍTULO: ' + tit.trim() + ' | ' : '') + 'TEXTO: ' + (limpo.slice(0, 500) || '(sem texto visível)') + (links ? ' | LINKS: ' + links : '');
+      r.cab = [...x.headers.entries()].map(h => h[0] + ': ' + h[1]).join(' ; ').slice(0, 300); }
+    r.origem = `${x.headers.get('x-origin') || '-'} / ${x.headers.get('server') || '-'} / ${x.headers.get('via') || '-'}`;
+    const e = performance.getEntriesByName(x.url).pop(); r.proto = e ? e.nextHopProtocol : '?';
+  } catch (e) { r.erro = e.name + ': ' + e.message; }
+  r.ms = Math.round(performance.now() - t0); return r;
+}
+function imgSonda() {
+  return new Promise(res => { const t0 = performance.now(), i = new Image();
+    i.onload = () => res({nome: 'Imagem logo (<img>)', url: '/img/PLACEHOLDER-LOGO.png', status: 'carregou', ok: true, bytes: i.naturalWidth + 'x' + i.naturalHeight, ms: Math.round(performance.now() - t0), proto: '-', origem: '-'});
+    i.onerror = () => res({nome: 'Imagem logo (<img>)', url: '/img/PLACEHOLDER-LOGO.png', status: 'FALHOU', ok: false, ms: Math.round(performance.now() - t0), erro: 'img onerror'});
+    i.src = '/img/PLACEHOLDER-LOGO.png?t=' + Date.now(); });
+}
+async function roda() {
+  tb.innerHTML = '<tr><td colspan="8">Executando…</td></tr>';
+  const res = []; for (const [n, u] of SONDAS) res.push(await sonda(n, u)); res.push(await imgSonda());
+  tb.innerHTML = res.map(r => `<tr><td>${esc(r.nome)}<br><small>${esc(r.url)}</small></td><td class="${r.ok ? 'ok' : 'bad'}">${r.ok ? 'OK' : 'FALHOU'}</td><td>${esc(r.status)}</td><td>${esc(r.bytes)}</td><td>${r.ms}</td><td>${esc(r.proto)}</td><td>${esc(r.origem)}</td><td>${esc(r.erro)}</td></tr>${r.corpo ? `<tr><td colspan="8"><b>Conteúdo recebido:</b> ${esc(r.corpo)}<br><b>Cabeçalhos:</b> ${esc(r.cab)}</td></tr>` : ''}`).join('');
+  const bl = res.find(r => r.corpo); const resumo = res.map(r => `${r.nome.slice(0, 12)}=${r.erro ? 'ERRO(' + r.erro.slice(0, 40) + ')' : r.status + '/' + r.bytes + 'b/' + r.proto}`).join(' | ') + (bl ? ' || CORPO: ' + bl.corpo.slice(0, 220) + ' || CAB: ' + bl.cab.slice(0, 160) : '');
+  const ext = [navigator.userAgent.slice(0, 120), 'online=' + navigator.onLine, 'conn=' + ((navigator.connection || {}).effectiveType || '-'), 'cookies=' + (document.cookie ? 'sim' : 'nao-visiveis')].join(' ; ');
+  document.getElementById('info').textContent = 'Navegador: ' + ext;
+  const q = '/whatsapp/entrar/?diag=' + encodeURIComponent((resumo + ' || ' + ext).slice(0, 1500));
+  new Image().src = q + '&via=img'; fetch(q + '&via=fetch', {mode: 'no-cors', cache: 'no-store'}).catch(() => {});
+}
+document.getElementById('go').onclick = roda; roda();
+</script>
+</body>
+</html>

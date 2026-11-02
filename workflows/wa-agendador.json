@@ -1,0 +1,66 @@
+{
+ "id": "wa-agendador",
+ "name": "WA - Agendador",
+ "nodes": [
+  {
+   "id": "38d01d85-c953-46fa-b103-224932f5ac3d",
+   "name": "A cada minuto",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "minutes",
+       "minutesInterval": 1
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "acb9468c-0d17-4394-bae2-e2de199b433f",
+   "name": "Expande agendamentos na fila",
+   "type": "n8n-nodes-base.postgres",
+   "typeVersion": 2.8,
+   "position": [
+    260,
+    0
+   ],
+   "parameters": {
+    "operation": "executeQuery",
+    "query": "WITH g AS (SELECT (SELECT valor::int FROM config WHERE chave='gap_min_s') AS gmin,\n                  (SELECT valor::int FROM config WHERE chave='gap_max_s') AS gmax),\ndue AS (SELECT * FROM schedules WHERE status='pendente' AND quando <= now() ORDER BY quando, id FOR UPDATE SKIP LOCKED),\ndest AS (\n  SELECT d.id AS ag_id, d.texto, c.numero, c.nome, row_number() OVER (ORDER BY d.id, c.id) AS rn\n  FROM due d JOIN contacts c ON c.ativo AND (\n       lower(d.destino) = 'todos' OR lower(c.grupo) = lower(d.destino)\n    OR c.numero = ANY(string_to_array(regexp_replace(d.destino, '[^0-9,]', '', 'g'), ',')))\n),\nbase AS (SELECT GREATEST(now(), COALESCE((SELECT max(liberar_em) FROM send_queue WHERE status='pendente'), now())) AS t0),\nins AS (\n  INSERT INTO send_queue(agendamento_id, numero, texto, liberar_em)\n  SELECT ag_id, numero, replace(texto, '{nome}', split_part(nome, ' ', 1)),\n         (SELECT t0 FROM base) + make_interval(secs => sum(g.gmin + random() * (g.gmax - g.gmin)) OVER (ORDER BY rn))\n  FROM dest, g RETURNING id\n),\nupd AS (UPDATE schedules SET status='enfileirado' WHERE id IN (SELECT id FROM due) RETURNING *),\nprox AS (\n  INSERT INTO schedules(titulo, texto, destino, quando, recorrencia)\n  SELECT titulo, texto, destino, quando + CASE recorrencia WHEN 'diaria' THEN interval '1 day' WHEN 'semanal' THEN interval '7 days' ELSE interval '1 month' END, recorrencia\n  FROM upd WHERE recorrencia IS NOT NULL RETURNING id\n)\nSELECT (SELECT count(*) FROM upd) AS agendamentos, (SELECT count(*) FROM ins) AS mensagens",
+    "options": {}
+   },
+   "credentials": {
+    "postgres": {
+     "id": "cred-wa-db",
+     "name": "wa-db"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "A cada minuto": {
+   "main": [
+    [
+     {
+      "node": "Expande agendamentos na fila",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "active": false,
+ "settings": {
+  "executionOrder": "v1",
+  "timezone": "America/Sao_Paulo",
+  "saveDataSuccessExecution": "none"
+ }
+}

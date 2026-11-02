@@ -1,0 +1,367 @@
+{
+ "id": "wa-agendar",
+ "name": "WA - Agendar mensagem (formulário)",
+ "nodes": [
+  {
+   "id": "1e67d9c2-b668-44b3-ac07-41016849a058",
+   "name": "Agendar mensagem",
+   "type": "n8n-nodes-base.formTrigger",
+   "typeVersion": 2.6,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "authentication": "basicAuth",
+    "formTitle": "Agendar mensagem",
+    "formDescription": "Programe um aviso. Use {nome} no texto para colocar o primeiro nome de cada pessoa.",
+    "formFields": {
+     "values": [
+      {
+       "fieldLabel": "Título",
+       "requiredField": true
+      },
+      {
+       "fieldLabel": "Mensagem",
+       "requiredField": true,
+       "fieldType": "textarea"
+      },
+      {
+       "fieldLabel": "Destinatários",
+       "requiredField": true,
+       "placeholder": "todos  |  nome de um grupo  |  números separados por vírgula"
+      },
+      {
+       "fieldLabel": "Data e hora do envio",
+       "requiredField": true,
+       "fieldType": "dateTime"
+      },
+      {
+       "fieldLabel": "Repetir",
+       "requiredField": true,
+       "fieldType": "dropdown",
+       "fieldOptions": {
+        "values": [
+         {
+          "option": "Não repetir"
+         },
+         {
+          "option": "Todo dia"
+         },
+         {
+          "option": "Toda semana"
+         },
+         {
+          "option": "Todo mês"
+         }
+        ]
+       }
+      }
+     ]
+    },
+    "responseMode": "onReceived",
+    "options": {
+     "path": "agendar",
+     "buttonLabel": "Agendar",
+     "appendAttribution": false
+    }
+   },
+   "webhookId": "14a97611-fe39-490b-9853-6d227618e07e",
+   "credentials": {
+    "httpBasicAuth": {
+     "id": "cred-form-auth",
+     "name": "form-auth"
+    }
+   }
+  },
+  {
+   "id": "d90e4e9f-54a7-4648-8874-dba4696fd684",
+   "name": "Prepara",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    260,
+    0
+   ],
+   "parameters": {
+    "jsCode": "\nconst j = $input.first().json;\nconst rec = {'Todo dia': 'diaria', 'Toda semana': 'semanal', 'Todo mês': 'mensal'}[j['Repetir']] || null;\nconst quando = String(j['Data e hora do envio'] || '').replace(' ', 'T').slice(0, 16);\nconst base = {titulo: String(j['Título'] || '').trim(), texto: String(j['Mensagem'] || '').trim(), destino: String(j['Destinatários'] || 'todos').trim() || 'todos', quando, rec, repete: j['Repetir'] || 'Não repetir'};\nif (!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$/.test(quando)) return [{json: {...base, ok: false, erro: 'Data e hora inválidas.'}}];\nreturn [{json: {...base, ok: true}}];\n"
+   }
+  },
+  {
+   "id": "18361d53-b55c-4ba2-b47a-6b538c8178f1",
+   "name": "Dados válidos?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    520,
+    0
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "7a4cb12c-1055-4d75-bdd4-f64534742b62",
+       "leftValue": "={{ $json.ok }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "6ba6637b-d0f4-4022-abce-8b573d0a01e5",
+   "name": "Fim - inválido",
+   "type": "n8n-nodes-base.form",
+   "typeVersion": 2.5,
+   "position": [
+    780,
+    120
+   ],
+   "parameters": {
+    "operation": "completion",
+    "completionTitle": "Não foi possível agendar",
+    "completionMessage": "={{ $('Prepara').first().json.erro }}",
+    "options": {}
+   },
+   "webhookId": "bd331ef6-8639-4da0-a6b9-6e8551d446d4"
+  },
+  {
+   "id": "658f798b-3f4e-4c66-b478-bb73917a0bbc",
+   "name": "Conta destinatários",
+   "type": "n8n-nodes-base.postgres",
+   "typeVersion": 2.8,
+   "position": [
+    780,
+    0
+   ],
+   "parameters": {
+    "operation": "executeQuery",
+    "query": "SELECT count(*)::int AS qtd FROM contacts c WHERE c.ativo AND (lower($1)='todos' OR lower(c.grupo)=lower($1) OR c.numero = ANY(string_to_array(regexp_replace($1,'[^0-9,]','','g'),',')))",
+    "options": {
+     "queryReplacement": "={{ [$json.destino] }}"
+    }
+   },
+   "credentials": {
+    "postgres": {
+     "id": "cred-wa-db",
+     "name": "wa-db"
+    }
+   }
+  },
+  {
+   "id": "a9ea4237-3f65-4773-84c5-1322c1986ac6",
+   "name": "Decide",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1040,
+    0
+   ],
+   "parameters": {
+    "jsCode": "\nconst p = $('Prepara').first().json, q = $input.first().json.qtd;\nconst [d, h] = p.quando.split('T'), [a, m, dia] = d.split('-');\nconst quando = `${dia}/${m}/${a} às ${h}`;\nif (!q) return [{json: {...p, enviar: false, tituloFim: 'Nenhum destinatário encontrado',\n  mensagem: `Nenhum contato ativo corresponde a “${p.destino}”. Use “todos”, o nome de um grupo existente, ou os números completos (com 55 e DDD) separados por vírgula. Nada foi agendado.`}}];\nreturn [{json: {...p, enviar: true, tituloFim: 'Mensagem agendada ✅',\n  mensagem: `“${p.titulo}” será enviada em ${quando} para ${q} contato(s) (${p.destino}). Repetição: ${p.repete}. Os envios saem um de cada vez, com intervalo entre eles, dentro da janela configurada.`}}];\n"
+   }
+  },
+  {
+   "id": "3772465c-9891-4e25-b642-f2fbb8b69375",
+   "name": "Tem destinatários?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    1300,
+    0
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "93f24184-be92-4293-a5f0-9f5c9ba04fa4",
+       "leftValue": "={{ $json.enviar }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "5e34c3fd-bb7e-484f-bccd-3d1b751f4c74",
+   "name": "Salva agendamento",
+   "type": "n8n-nodes-base.postgres",
+   "typeVersion": 2.8,
+   "position": [
+    1560,
+    -60
+   ],
+   "parameters": {
+    "operation": "executeQuery",
+    "query": "INSERT INTO schedules(titulo,texto,destino,quando,recorrencia) VALUES ($1,$2,$3,($4::timestamp AT TIME ZONE 'America/Sao_Paulo'),$5) RETURNING id",
+    "options": {
+     "queryReplacement": "={{ [$json.titulo, $json.texto, $json.destino, $json.quando, $json.rec] }}"
+    }
+   },
+   "credentials": {
+    "postgres": {
+     "id": "cred-wa-db",
+     "name": "wa-db"
+    }
+   }
+  },
+  {
+   "id": "2c405ebc-c0b7-41a9-bfe7-9f9ded1dd51b",
+   "name": "Fim - agendado",
+   "type": "n8n-nodes-base.form",
+   "typeVersion": 2.5,
+   "position": [
+    1820,
+    -60
+   ],
+   "parameters": {
+    "operation": "completion",
+    "completionTitle": "={{ $('Decide').first().json.tituloFim }}",
+    "completionMessage": "={{ $('Decide').first().json.mensagem }}",
+    "options": {}
+   },
+   "webhookId": "36a87c56-1bd8-4a75-96fe-797bc59c09e8"
+  },
+  {
+   "id": "b6ac7fdd-3fe9-42a1-9abb-fdb92dedba4f",
+   "name": "Fim - sem destino",
+   "type": "n8n-nodes-base.form",
+   "typeVersion": 2.5,
+   "position": [
+    1560,
+    120
+   ],
+   "parameters": {
+    "operation": "completion",
+    "completionTitle": "={{ $('Decide').first().json.tituloFim }}",
+    "completionMessage": "={{ $('Decide').first().json.mensagem }}",
+    "options": {}
+   },
+   "webhookId": "e318806c-dd46-4e7f-b94a-887a907fac0b"
+  }
+ ],
+ "connections": {
+  "Agendar mensagem": {
+   "main": [
+    [
+     {
+      "node": "Prepara",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Prepara": {
+   "main": [
+    [
+     {
+      "node": "Dados válidos?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Dados válidos?": {
+   "main": [
+    [
+     {
+      "node": "Conta destinatários",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Fim - inválido",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Conta destinatários": {
+   "main": [
+    [
+     {
+      "node": "Decide",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Decide": {
+   "main": [
+    [
+     {
+      "node": "Tem destinatários?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Tem destinatários?": {
+   "main": [
+    [
+     {
+      "node": "Salva agendamento",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Fim - sem destino",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Salva agendamento": {
+   "main": [
+    [
+     {
+      "node": "Fim - agendado",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "active": false,
+ "settings": {
+  "executionOrder": "v1",
+  "timezone": "America/Sao_Paulo"
+ }
+}

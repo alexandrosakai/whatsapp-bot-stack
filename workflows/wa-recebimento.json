@@ -1,0 +1,951 @@
+{
+ "id": "wa-recebimento",
+ "name": "WA - Recebimento",
+ "nodes": [
+  {
+   "id": "c555e27e-e259-496e-b1d5-caee52e5510d",
+   "name": "Webhook",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2.2,
+   "position": [
+    0,
+    450
+   ],
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "wa-in",
+    "responseMode": "onReceived",
+    "options": {}
+   },
+   "webhookId": "3e773878-d371-4593-9c36-1006507ead68"
+  },
+  {
+   "id": "31696d43-09a8-4c0d-9f8c-47300b975562",
+   "name": "Normaliza",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    260,
+    450
+   ],
+   "parameters": {
+    "jsCode": "\nconst it = $input.first().json;\nconst h = it.headers || {};\nif ((h['x-secret'] || '') !== $env.WEBHOOK_SECRET) return [];\nconst b = it.body || {};\nif (String(b.event || '').toLowerCase().replace('_', '.') !== 'messages.upsert') return [];\nconst d = b.data || {}, k = d.key || {};\nif (k.fromMe) return [];\nconst jid = k.remoteJid || '';\nif (!jid || jid.endsWith('@g.us') || jid.startsWith('status@') || jid.endsWith('@broadcast')) return [];\nconst base = jid.endsWith('@lid') ? (k.senderPn || k.remoteJidAlt || '') : jid;\nconst numero = String(base).split('@')[0].replace(/\\D/g, '');\nif (!numero) return [];\nconst m = d.message || {};\nconst texto = (m.conversation || (m.extendedTextMessage && m.extendedTextMessage.text) || '').trim();\nconst a = m.audioMessage;\nif (!texto && !a) return [];\nreturn [{json: {numero, idmsg: k.id || '', pushName: d.pushName || '', texto, audio: !!a,\n  b64: m.base64 || d.base64 || '', mimetype: a ? (a.mimetype || 'audio/ogg') : '', segundos: a ? (a.seconds || 0) : 0}}];\n"
+   }
+  },
+  {
+   "id": "37117135-452c-4472-b486-6a4c3da298ac",
+   "name": "Contato",
+   "type": "n8n-nodes-base.postgres",
+   "typeVersion": 2.8,
+   "position": [
+    520,
+    450
+   ],
+   "parameters": {
+    "operation": "executeQuery",
+    "query": "SELECT c.numero AS numero_contato, c.nome, c.grupo,\n  COALESCE(s.ativa AND s.ultima_msg > now() - make_interval(mins => (SELECT valor::int FROM config WHERE chave='timeout_min')), false) AS em_sessao,\n  (SELECT json_object_agg(chave, valor) FROM config) AS cfg\nFROM contacts c LEFT JOIN sessions s ON s.numero = c.numero\nWHERE c.ativo AND substr(c.numero,3,2) = substr($1,3,2) AND right(c.numero,8) = right($1,8)\nLIMIT 1",
+    "options": {
+     "queryReplacement": "={{ [$json.numero] }}"
+    }
+   },
+   "credentials": {
+    "postgres": {
+     "id": "cred-wa-db",
+     "name": "wa-db"
+    }
+   }
+  },
+  {
+   "id": "9459251e-dacc-456d-9994-e95f23ee1b6d",
+   "name": "Roteia",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    780,
+    450
+   ],
+   "parameters": {
+    "jsCode": "\nconst c = $input.first().json, n = $('Normaliza').first().json, cfg = c.cfg || {};\n// grupos sem resposta automática (config 'sem_resposta_grupos', separados por vírgula): quem responde é uma pessoa\nconst mudos = String(cfg.sem_resposta_grupos || '').toLowerCase().split(',').map(x => x.trim()).filter(Boolean);\nif (mudos.includes(String(c.grupo || '').toLowerCase())) return [];\nconst norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/[^a-z0-9 ?]/g, ' ').replace(/\\s+/g, ' ').trim();\nlet acao;\nif (n.audio) acao = 'audio';\nelse {\n  const t = norm(n.texto);\n  if (t === norm(cfg.saida || 'encerrar')) acao = 'encerrar';   // opcional: a sessão também acaba sozinha após o tempo configurado\n  else {\n    // resposta curta (\"ok\", \"obrigado\", só emoji...) não gera resposta, para não ficar chato\n    const ack = new Set(String(cfg.ignorar_curtas || '').split(',').map(x => norm(x).replace(/\\?/g, '')).filter(Boolean));\n    const letras = t.replace(/[^a-z0-9]/g, '');\n    const palavras = t.replace(/\\?/g, ' ').split(' ').filter(Boolean);\n    const curta = letras.length <= 1 || (!t.includes('?') && palavras.length > 0 && palavras.every(w => ack.has(w)));\n    if (curta) return [];\n    acao = 'conversar';\n  }\n}\nreturn [{json: {acao, numero: n.numero, numero_contato: c.numero_contato, nome: c.nome, em_sessao: true, cfg,\n  texto: n.texto, idmsg: n.idmsg, audio: n.audio, b64: n.b64, mimetype: n.mimetype, segundos: n.segundos}}];\n"
+   }
+  },
+  {
+   "id": "34e30059-730e-4e8f-b417-e73837963194",
+   "name": "Switch",
+   "type": "n8n-nodes-base.switch",
+   "typeVersion": 3.2,
+   "position": [
+    1040,
+    450
+   ],
+   "parameters": {
+    "rules": {
+     "values": [
+      {
+       "conditions": {
+        "options": {
+         "caseSensitive": true,
+         "leftValue": "",
+         "typeValidation": "strict",
+         "version": 2
+        },
+        "conditions": [
+         {
+          "id": "09d7edec-84cb-4bbe-9bfb-943bd3f9494e",
+          "leftValue": "={{ $json.acao }}",
+          "rightValue": "encerrar",
+          "operator": {
+           "type": "string",
+           "operation": "equals"
+          }
+         }
+        ],
+        "combinator": "and"
+       },
+       "renameOutput": true,
+       "outputKey": "encerrar"
+      },
+      {
+       "conditions": {
+        "options": {
+         "caseSensitive": true,
+         "leftValue": "",
+         "typeValidation": "strict",
+         "version": 2
+        },
+        "conditions": [
+         {
+          "id": "4d1edea8-2d7c-4728-89d8-7743964330fb",
+          "leftValue": "={{ $json.acao }}",
+          "rightValue": "conversar",
+          "operator": {
+           "type": "string",
+           "operation": "equals"
+          }
+         }
+        ],
+        "combinator": "and"
+       },
+       "renameOutput": true,
+       "outputKey": "conversar"
+      },
+      {
+       "conditions": {
+        "options": {
+         "caseSensitive": true,
+         "leftValue": "",
+         "typeValidation": "strict",
+         "version": 2
+        },
+        "conditions": [
+         {
+          "id": "cb7e482f-0fc4-4755-9d0b-b6afa8ae2d97",
+          "leftValue": "={{ $json.acao }}",
+          "rightValue": "audio",
+          "operator": {
+           "type": "string",
+           "operation": "equals"
+          }
+         }
+        ],
+        "combinator": "and"
+       },
+       "renameOutput": true,
+       "outputKey": "audio"
+      }
+     ]
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "812cde98-8cc6-458c-b24b-0ae24c6a441c",
+   "name": "Encerra sessão",
+   "type": "n8n-nodes-base.postgres",
+   "typeVersion": 2.8,
+   "position": [
+    1300,
+    300
+   ],
+   "parameters": {
+    "operation": "executeQuery",
+    "query": "WITH d AS (DELETE FROM history WHERE numero=$1) INSERT INTO sessions(numero,ativa,iniciada,ultima_msg) VALUES($1,false,now(),now()) ON CONFLICT (numero) DO UPDATE SET ativa=false RETURNING numero",
+    "options": {
+     "queryReplacement": "={{ [$json.numero_contato] }}"
+    }
+   },
+   "credentials": {
+    "postgres": {
+     "id": "cred-wa-db",
+     "name": "wa-db"
+    }
+   }
+  },
+  {
+   "id": "c68cf38d-d360-44bd-bfef-984acc2d962d",
+   "name": "Msg encerrar",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1560,
+    300
+   ],
+   "parameters": {
+    "jsCode": "const r = $('Roteia').first().json;\nconst texto = `Conversa encerrada. Quando quiser, é só mandar uma nova mensagem. 😊`;\nreturn [{json: {body: {number: r.numero, text: texto, delay: 2500}}}];"
+   }
+  },
+  {
+   "id": "d36b1f1a-62ff-4d8e-993d-f431ad92a7df",
+   "name": "Histórico",
+   "type": "n8n-nodes-base.postgres",
+   "typeVersion": 2.8,
+   "position": [
+    1300,
+    600
+   ],
+   "parameters": {
+    "operation": "executeQuery",
+    "query": "SELECT $2::text AS texto, $3::text AS nome, COALESCE((SELECT json_agg(json_build_object('role',papel,'content',conteudo) ORDER BY id) FROM (SELECT id,papel,conteudo FROM history WHERE numero=$1 AND criado > now() - make_interval(mins => (SELECT valor::int FROM config WHERE chave='timeout_min')) ORDER BY id DESC LIMIT 20) t),'[]'::json) AS hist, (SELECT valor FROM config WHERE chave='persona') AS persona, (SELECT valor FROM config WHERE chave='modelo') AS modelo, (SELECT string_agg('### ' || titulo || E'\\n' || texto, E'\\n\\n' ORDER BY ordem, id) FROM knowledge WHERE ativo) AS conhecimento",
+    "options": {
+     "queryReplacement": "={{ [$json.numero_contato, $json.texto, $json.nome] }}"
+    }
+   },
+   "credentials": {
+    "postgres": {
+     "id": "cred-wa-db",
+     "name": "wa-db"
+    }
+   }
+  },
+  {
+   "id": "56fb6f07-c3f5-45ba-9de5-d02a48ce9ac9",
+   "name": "Pedido Claude",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1560,
+    600
+   ],
+   "parameters": {
+    "jsCode": "\nconst j = $input.first().json;\nlet system = (j.persona || '').replace('{nome}', (j.nome || '').split(' ')[0]);\nconst info = (j.conhecimento || '').trim();\nsystem += info\n  ? '\\n\\nINFORMAÇÕES OFICIAIS DA EMPRESA (única fonte para dados da Empresa Exemplo: horários, telefones, endereço, preços, prazos, políticas). Use somente o que está escrito abaixo; se a pergunta pedir algo que não consta aqui, diga com simpatia que vai verificar com a equipe e NÃO invente:\\n\\n' + info\n  : '\\n\\nVocê ainda não recebeu informações oficiais da empresa. Para qualquer dado da Empresa Exemplo (horário, telefone, endereço, preços, prazos), diga que vai verificar com a equipe e não invente.';\nconst messages = (j.hist || []).concat([{role: 'user', content: j.texto}]);\nreturn [{json: {body: {model: j.modelo || 'claude-sonnet-5-5', max_tokens: 600, system, messages}}}];\n"
+   }
+  },
+  {
+   "id": "954b5b20-d7e8-454d-bbcb-f3cf1d2206de",
+   "name": "Claude conversa",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.5,
+   "position": [
+    1820,
+    600
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.ANTHROPIC_URL }}/v1/messages",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.ANTHROPIC_API_KEY }}"
+      },
+      {
+       "name": "anthropic-version",
+       "value": "2023-06-01"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.body) }}",
+    "options": {
+     "timeout": 90000
+    }
+   },
+   "onError": "continueErrorOutput"
+  },
+  {
+   "id": "8bb8866e-8977-47ad-9064-221a77f5f43a",
+   "name": "Extrai resposta",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2080,
+    600
+   ],
+   "parameters": {
+    "jsCode": "\nconst j = $input.first().json, r = $('Roteia').first().json;\nconst txt = ((j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\\n')).trim();\nconst user = $('Histórico').first().json.texto;\nreturn [{json: {texto: txt || 'Desculpe, não consegui responder agora.', usuario: user}}];\n"
+   }
+  },
+  {
+   "id": "3973b192-1437-485e-a32c-3d34931ef2c5",
+   "name": "Salva histórico",
+   "type": "n8n-nodes-base.postgres",
+   "typeVersion": 2.8,
+   "position": [
+    2340,
+    600
+   ],
+   "parameters": {
+    "operation": "executeQuery",
+    "query": "WITH a AS (INSERT INTO history(numero,papel,conteudo) VALUES ($1,'user',$2),($1,'assistant',$3)), b AS (INSERT INTO sessions(numero,ativa,iniciada,ultima_msg) VALUES ($1,true,now(),now()) ON CONFLICT (numero) DO UPDATE SET iniciada = CASE WHEN sessoes.ativa AND sessoes.ultima_msg > now() - make_interval(mins => (SELECT valor::int FROM config WHERE chave='timeout_min')) THEN sessoes.iniciada ELSE now() END, ativa=true, ultima_msg=now()) SELECT 1 AS ok",
+    "options": {
+     "queryReplacement": "={{ [$('Roteia').first().json.numero_contato, $json.usuario, $json.texto] }}"
+    }
+   },
+   "credentials": {
+    "postgres": {
+     "id": "cred-wa-db",
+     "name": "wa-db"
+    }
+   }
+  },
+  {
+   "id": "b96d4188-fcfe-4cc7-964e-a65d8d9c3799",
+   "name": "Msg resposta",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2600,
+    600
+   ],
+   "parameters": {
+    "jsCode": "const r = $('Roteia').first().json;\nconst texto = $('Extrai resposta').first().json.texto;\nreturn [{json: {body: {number: r.numero, text: texto, delay: 4000}}}];"
+   }
+  },
+  {
+   "id": "e90e48a2-4479-4b03-a109-2cfa16fb241c",
+   "name": "Msg erro Claude",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2080,
+    750
+   ],
+   "parameters": {
+    "jsCode": "const r = $('Roteia').first().json;\nconst texto = 'Desculpe, não consegui responder agora. Tente de novo em instantes. 🙏';\nreturn [{json: {body: {number: r.numero, text: texto, delay: 2500}}}];"
+   }
+  },
+  {
+   "id": "d0bc454a-0812-44ce-b61e-d663e77e94e3",
+   "name": "Prepara áudio",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1300,
+    1050
+   ],
+   "parameters": {
+    "jsCode": "\nconst j = $input.first().json;\nif (!j.b64) return [];\nconst bin = await this.helpers.prepareBinaryData(Buffer.from(j.b64, 'base64'), 'audio.ogg', j.mimetype || 'audio/ogg');\nreturn [{json: {}, binary: {data: bin}}];\n"
+   }
+  },
+  {
+   "id": "b20c5b18-0ca8-4e86-ab98-0a11d0ea5192",
+   "name": "Whisper",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.5,
+   "position": [
+    1560,
+    1050
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.WHISPER_URL }}/transcribe",
+    "sendBody": true,
+    "contentType": "multipart-form-data",
+    "bodyParameters": {
+     "parameters": [
+      {
+       "parameterType": "formBinaryData",
+       "name": "file",
+       "inputDataFieldName": "data"
+      }
+     ]
+    },
+    "options": {
+     "timeout": 300000
+    }
+   },
+   "onError": "continueErrorOutput"
+  },
+  {
+   "id": "99e8fa7f-dcc5-4105-ab65-e1c419af55dd",
+   "name": "Pedido resumo",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1820,
+    1050
+   ],
+   "parameters": {
+    "jsCode": "\nconst w = $input.first().json, r = $('Roteia').first().json;\nconst texto = (w.text || '').trim();\nif (!texto) return [];\nconst system = 'Você resume áudios de WhatsApp já transcritos. Responda em português do Brasil, em Markdown, usando exatamente estas seções: \"## Resumo\" (1 a 2 frases), \"## Pontos principais\" (3 a 7 tópicos com \"-\"), \"## Pedidos e pendências\" (tópicos; escreva \"- Nenhum\" se não houver) e \"## Tom e urgência\" (uma linha). Seja fiel ao que foi dito e não invente nada.';\nreturn [{json: {transcricao: texto, duracao: w.duration || r.segundos || 0,\n  body: {model: r.cfg.modelo || 'claude-sonnet-5-5', max_tokens: 800, system, messages: [{role: 'user', content: 'Transcrição do áudio de ' + r.nome + ':\\n\\n' + texto}]}}}];\n"
+   }
+  },
+  {
+   "id": "fdfb028c-2e67-4b42-9fce-2334206ccbd6",
+   "name": "Claude resumo",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.5,
+   "position": [
+    2080,
+    1050
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.ANTHROPIC_URL }}/v1/messages",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.ANTHROPIC_API_KEY }}"
+      },
+      {
+       "name": "anthropic-version",
+       "value": "2023-06-01"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.body) }}",
+    "options": {
+     "timeout": 90000
+    }
+   },
+   "onError": "continueErrorOutput"
+  },
+  {
+   "id": "b98f0301-30a9-4522-a6f6-c0611a04a158",
+   "name": "Resumo",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2340,
+    1050
+   ],
+   "parameters": {
+    "jsCode": "\nconst j = $input.first().json, p = $('Pedido resumo').first().json;\nconst resumo = ((j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\\n')).trim();\nreturn [{json: {transcricao: p.transcricao, duracao: p.duracao, resumo: resumo || '## Resumo\\n- (não foi possível gerar o resumo)'}}];\n"
+   }
+  },
+  {
+   "id": "b97ada9d-7c64-4eac-af94-96de4e84b41d",
+   "name": "Resumo sem Claude",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2340,
+    1200
+   ],
+   "parameters": {
+    "jsCode": "\nconst p = $('Pedido resumo').first().json;\nreturn [{json: {transcricao: p.transcricao, duracao: p.duracao, resumo: '## Resumo\\n- (resumo indisponível: falha ao falar com o Claude)'}}];\n"
+   }
+  },
+  {
+   "id": "2ae9e8ad-3d70-4916-916a-c8fa74b92f32",
+   "name": "Em conversa?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    2600,
+    1050
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "89e38a53-e138-4a6a-9e17-d2f8a2632ffe",
+       "leftValue": "={{ $('Roteia').first().json.em_sessao }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "de837c71-15e6-4840-abb2-668d05bf517c",
+   "name": "Áudio vira texto",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2860,
+    900
+   ],
+   "parameters": {
+    "jsCode": "\nconst r = $('Roteia').first().json, s = $('Resumo').first().json;\nreturn [{json: {numero_contato: r.numero_contato, nome: r.nome, texto: s.transcricao}}];\n"
+   }
+  },
+  {
+   "id": "533a1e03-5b6d-44cc-8659-7b246071e79f",
+   "name": "Monta arquivo",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2860,
+    1200
+   ],
+   "parameters": {
+    "jsCode": "\nconst r = $('Roteia').first().json;\nif (!r.audio) return [];\nlet s; try { s = $('Resumo').first().json; } catch (e) { s = $('Resumo sem Claude').first().json; }\nlet resposta = ''; try { resposta = $('Extrai resposta').first().json.texto; } catch (e) {}\nconst agora = new Date().toLocaleString('sv-SE', {timeZone: 'America/Sao_Paulo'});   // 2026-10-31 09:20:11\nconst [dia, hora] = agora.split(' ');\nconst slug = (r.nome || 'contato').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '');\nconst arquivo = `/files/resumos/${dia}_${hora.replace(/:/g, '')}_${r.numero_contato}_${slug}.md`;\nconst md = [`# Áudio de ${r.nome}`, '', `- **Contato:** ${r.nome} (${r.numero_contato})`, `- **Data/hora:** ${agora}`,\n  `- **Duração:** ${Math.round(s.duracao || 0)} s`, `- **ID da mensagem:** ${r.idmsg}`, `- **Conversa com o assistente:** ${r.em_sessao ? 'sim' : 'não'}`, '',\n  s.resumo, '', '## Transcrição', '', ...s.transcricao.split('\\n').map(l => '> ' + l)];\nif (resposta) md.push('', '## Resposta enviada pelo assistente', '', ...resposta.split('\\n').map(l => '> ' + l));\nconst bin = await this.helpers.prepareBinaryData(Buffer.from(md.join('\\n') + '\\n', 'utf8'), 'resumo.md', 'text/markdown');\nreturn [{json: {arquivo, numero: r.numero_contato, duracao: s.duracao || 0, transcricao: s.transcricao, resumo: s.resumo}, binary: {data: bin}}];\n"
+   }
+  },
+  {
+   "id": "22765608-3153-4caa-898f-d2fe64c1647a",
+   "name": "Grava arquivo",
+   "type": "n8n-nodes-base.readWriteFile",
+   "typeVersion": 1.1,
+   "position": [
+    3120,
+    1200
+   ],
+   "parameters": {
+    "operation": "write",
+    "fileName": "={{ $json.arquivo }}",
+    "dataPropertyName": "data",
+    "options": {}
+   }
+  },
+  {
+   "id": "f9fa4511-5ba5-415b-afe9-c27818141f4d",
+   "name": "Registra áudio",
+   "type": "n8n-nodes-base.postgres",
+   "typeVersion": 2.8,
+   "position": [
+    3380,
+    1200
+   ],
+   "parameters": {
+    "operation": "executeQuery",
+    "query": "INSERT INTO audio_messages(numero,duracao_s,transcricao,resumo,arquivo) VALUES ($1,$2,$3,$4,$5) RETURNING id",
+    "options": {
+     "queryReplacement": "={{ [$('Monta arquivo').first().json.numero, $('Monta arquivo').first().json.duracao, $('Monta arquivo').first().json.transcricao, $('Monta arquivo').first().json.resumo, $('Monta arquivo').first().json.arquivo] }}"
+    }
+   },
+   "credentials": {
+    "postgres": {
+     "id": "cred-wa-db",
+     "name": "wa-db"
+    }
+   }
+  },
+  {
+   "id": "de29521f-8045-4417-be5a-84860464ad37",
+   "name": "Ack áudio",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    3640,
+    1200
+   ],
+   "parameters": {
+    "jsCode": "\nconst r = $('Roteia').first().json;\nif (r.em_sessao || (r.cfg.ack_audio || 'sim') !== 'sim') return [];\nreturn [{json: {body: {number: r.numero, text: 'Recebi seu áudio ✅ Já guardei o resumo.', delay: 2500}}}];\n"
+   }
+  },
+  {
+   "id": "f8757d16-a173-418d-a5a9-6204ff5bd974",
+   "name": "Msg áudio falhou",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1820,
+    1350
+   ],
+   "parameters": {
+    "jsCode": "const r = $('Roteia').first().json;\nconst texto = 'Não consegui entender esse áudio. Pode tentar de novo ou escrever? 🙏';\nreturn [{json: {body: {number: r.numero, text: texto, delay: 2500}}}];"
+   }
+  },
+  {
+   "id": "cfa69c87-e0d2-41fe-8abb-e2d3600e932c",
+   "name": "Envia WhatsApp",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.5,
+   "position": [
+    3900,
+    450
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $env.EVOLUTION_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "apikey",
+       "value": "={{ $env.EVOLUTION_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.body) }}",
+    "options": {
+     "timeout": 30000
+    }
+   }
+  }
+ ],
+ "connections": {
+  "Webhook": {
+   "main": [
+    [
+     {
+      "node": "Normaliza",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Normaliza": {
+   "main": [
+    [
+     {
+      "node": "Contato",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Contato": {
+   "main": [
+    [
+     {
+      "node": "Roteia",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Roteia": {
+   "main": [
+    [
+     {
+      "node": "Switch",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Switch": {
+   "main": [
+    [
+     {
+      "node": "Encerra sessão",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Histórico",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Prepara áudio",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Encerra sessão": {
+   "main": [
+    [
+     {
+      "node": "Msg encerrar",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Msg encerrar": {
+   "main": [
+    [
+     {
+      "node": "Envia WhatsApp",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Histórico": {
+   "main": [
+    [
+     {
+      "node": "Pedido Claude",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Pedido Claude": {
+   "main": [
+    [
+     {
+      "node": "Claude conversa",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Claude conversa": {
+   "main": [
+    [
+     {
+      "node": "Extrai resposta",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Msg erro Claude",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Extrai resposta": {
+   "main": [
+    [
+     {
+      "node": "Salva histórico",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Salva histórico": {
+   "main": [
+    [
+     {
+      "node": "Msg resposta",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Msg resposta": {
+   "main": [
+    [
+     {
+      "node": "Envia WhatsApp",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Monta arquivo",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Msg erro Claude": {
+   "main": [
+    [
+     {
+      "node": "Envia WhatsApp",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Prepara áudio": {
+   "main": [
+    [
+     {
+      "node": "Whisper",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Whisper": {
+   "main": [
+    [
+     {
+      "node": "Pedido resumo",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Msg áudio falhou",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Pedido resumo": {
+   "main": [
+    [
+     {
+      "node": "Claude resumo",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Claude resumo": {
+   "main": [
+    [
+     {
+      "node": "Resumo",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Resumo sem Claude",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Resumo": {
+   "main": [
+    [
+     {
+      "node": "Em conversa?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Resumo sem Claude": {
+   "main": [
+    [
+     {
+      "node": "Em conversa?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Em conversa?": {
+   "main": [
+    [
+     {
+      "node": "Áudio vira texto",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Monta arquivo",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Áudio vira texto": {
+   "main": [
+    [
+     {
+      "node": "Histórico",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Monta arquivo": {
+   "main": [
+    [
+     {
+      "node": "Grava arquivo",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Grava arquivo": {
+   "main": [
+    [
+     {
+      "node": "Registra áudio",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Registra áudio": {
+   "main": [
+    [
+     {
+      "node": "Ack áudio",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Ack áudio": {
+   "main": [
+    [
+     {
+      "node": "Envia WhatsApp",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Msg áudio falhou": {
+   "main": [
+    [
+     {
+      "node": "Envia WhatsApp",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "active": false,
+ "settings": {
+  "executionOrder": "v1",
+  "timezone": "America/Sao_Paulo",
+  "saveDataSuccessExecution": "none",
+  "saveManualExecutions": false
+ }
+}

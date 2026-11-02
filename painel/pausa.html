@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pausar envios · WhatsApp · Empresa Exemplo</title>
+<link rel="icon" href="/img/PLACEHOLDER-FAVICON.png">
+<meta name="robots" content="noindex">
+<style>
+:root{--bg:#EEF2F1;--surface:#fff;--ink:#1C2A30;--muted:#5D6B72;--line:#DDE3E1;--accent:#1e3a8a;--accent-ink:#fff;--ok:#1F7A45;--ok-soft:#E5F3EA;--crit:#B42318;--crit-soft:#FCEBE9;--warn:#9A5B00;--warn-soft:#FBF1DF;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#0F1518;--surface:#182126;--ink:#E4EBEA;--muted:#98A7AD;--line:#2A373C;--accent:#93c5fd;--accent-ink:#0D1A17;--ok:#7FD39E;--ok-soft:#1C3125;--crit:#F28B82;--crit-soft:#3A2220;--warn:#E8B45C;--warn-soft:#352A17;color-scheme:dark}}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.top{height:56px;background:var(--surface);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;padding:0 20px}
+.top h1{margin:0;font-size:15px;font-weight:600;flex:1}.top a{color:var(--muted);text-decoration:none;font-size:13px}
+main{max-width:560px;margin:0 auto;padding:24px 16px 60px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:14px}
+.estado{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:600;margin-bottom:6px}
+.dot{width:14px;height:14px;border-radius:50%;background:var(--ok)}.pausado .dot{background:var(--crit)}
+.sub{color:var(--muted);margin:0 0 16px}
+.nums{display:flex;gap:10px;margin-bottom:16px}.nums div{flex:1;background:var(--bg);border-radius:10px;padding:10px;text-align:center}.nums b{display:block;font-size:22px}
+.btn{width:100%;border:0;border-radius:10px;padding:14px;font-size:16px;font-weight:700;cursor:pointer;margin-bottom:8px;background:var(--accent);color:var(--accent-ink)}
+.btn.pausar{background:var(--crit);color:#fff}.btn.sec{background:none;border:1px solid var(--line);color:var(--ink);font-weight:600}
+.btn:disabled{opacity:.45;cursor:default}
+.nota{background:var(--warn-soft);color:var(--warn);border-radius:10px;padding:10px 12px;font-size:13.5px}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);padding:10px 18px;border-radius:10px;color:#fff;background:var(--ok);z-index:9}.toast.e{background:var(--crit)}
+</style>
+</head>
+<body>
+<header class="top"><h1>Envios aos vendedores</h1><a href="/whatsapp/">← WhatsApp</a><a href="/whatsapp/api/logout">Sair</a></header>
+<main>
+  <div class="card" id="card">
+    <div class="estado" id="estado"><span class="dot"></span><span id="txt">Carregando…</span></div>
+    <p class="sub" id="sub"></p>
+    <div class="nums"><div><b id="nfila">–</b>na fila</div><div><b id="npaus">–</b>pausadas</div></div>
+    <button class="btn pausar" id="bPausar" hidden>⏸ Pausar envios aos vendedores</button>
+    <button class="btn" id="bRetomar" hidden>▶ Retomar envios</button>
+    <button class="btn sec" id="bDescartar" hidden>🗑 Descartar as mensagens pausadas</button>
+  </div>
+  <div class="nota">Pausar segura <b>só</b> as mensagens aos vendedores que ainda estão na fila (metas, orçamentos e cobrança), e impede novos envios automáticos. Os avisos para você e os outros contatos continuam normais. Ao retomar, as mensagens pausadas saem uma por minuto; se já passou da hora, use “Descartar”.</div>
+</main>
+<script>
+const API = '../api/', $ = id => document.getElementById(id);
+function toast(t, e) { const d = document.createElement('div'); d.className = 'toast' + (e ? ' e' : ''); d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 3500); }
+async function api(u, o) { const r = await fetch(API + u, o);
+  if (r.status === 401) { location.href = '/whatsapp/entrar/?next=' + encodeURIComponent(location.pathname); throw new Error('sessão expirada'); }
+  if (!r.ok) throw new Error('erro ' + r.status); return r.json(); }
+async function carregar() {
+  const d = await api('pausa');
+  $('card').className = 'card' + (d.pausado ? ' pausado' : '');
+  $('txt').textContent = d.pausado ? 'Envios PAUSADOS' : 'Envios ativos';
+  $('sub').textContent = d.pausado ? 'Nada será enviado aos vendedores até você retomar.' : 'As mensagens saem nos horários programados.';
+  $('nfila').textContent = d.na_fila; $('npaus').textContent = d.pausadas;
+  $('bPausar').hidden = d.pausado; $('bRetomar').hidden = !d.pausado; $('bDescartar').hidden = !(d.pausado && d.pausadas > 0);
+}
+async function acao(a, msg) {
+  if (a !== 'retomar' && !confirm(msg)) return;
+  try { const r = await api('pausa', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({acao: a})});
+    toast(a === 'pausar' ? `Pausado (${r.mensagens} mensagens seguradas)` : a === 'retomar' ? `Retomado (${r.mensagens} mensagens vão sair)` : `${r.mensagens} mensagens descartadas`); } catch (e) { toast(e.message, 1); }
+  carregar();
+}
+$('bPausar').onclick = () => acao('pausar', 'Pausar os envios aos vendedores agora?');
+$('bRetomar').onclick = () => acao('retomar');
+$('bDescartar').onclick = () => acao('descartar', 'Descartar de vez as mensagens pausadas? Elas não serão enviadas.');
+carregar().catch(e => { $('txt').textContent = 'Erro: ' + e.message; });
+setInterval(() => carregar().catch(() => {}), 20000);
+</script>
+</body>
+</html>

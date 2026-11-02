@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Atendimento WhatsApp · Empresa Exemplo</title>
+<link rel="icon" href="/img/PLACEHOLDER-FAVICON.png">
+<meta name="robots" content="noindex">
+<style>
+:root{
+  --bg:#EEF2F1; --surface:#FFFFFF; --ink:#1C2A30; --muted:#5D6B72; --line:#DDE3E1; --soft:#F6F8F7;
+  --accent:#1e3a8a; --accent-ink:#FFFFFF; --accent-soft:#E2EFEC; --brand:#2563eb;
+  --me:#DCEFEA; --them:#FFFFFF; --ok:#1F7A45; --ok-soft:#E5F3EA; --warn:#9A5B00; --warn-soft:#FBF1DF; --crit:#B42318; --crit-soft:#FCEBE9;
+  --shadow:0 1px 2px rgba(16,24,28,.06),0 1px 3px rgba(16,24,28,.04); color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0F1518; --surface:#182126; --ink:#E4EBEA; --muted:#98A7AD; --line:#2A373C; --soft:#1D282D;
+  --accent:#93c5fd; --accent-ink:#0D1A17; --accent-soft:#1D3533; --me:#1B4A44; --them:#202D32;
+  --ok:#7FD39E; --ok-soft:#1C3125; --warn:#E8B45C; --warn-soft:#352A17; --crit:#F28B82; --crit-soft:#3A2220; --shadow:none; color-scheme:dark;}}
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:14.5px/1.5 "IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;overflow:hidden}
+button,input,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.top{flex:none;height:56px;background:var(--surface);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;padding:0 20px}
+.top img{height:24px;display:block}
+.top .sep{width:1px;height:22px;background:var(--line)}
+.top h1{margin:0;font-size:15px;font-weight:600;letter-spacing:.01em}
+.top .sp{flex:1}
+.top a{color:var(--muted);text-decoration:none;font-size:13px}.top a:hover{color:var(--accent)}
+.chip{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:500;padding:4px 11px;border-radius:99px;background:var(--soft);border:1px solid var(--line);color:var(--muted)}
+.chip i{width:8px;height:8px;border-radius:50%;background:#9aa5ab}
+.chip.on{background:var(--ok-soft);color:var(--ok);border-color:transparent}.chip.on i{background:var(--ok);box-shadow:0 0 0 3px rgba(31,122,69,.18)}
+.chip.off{background:var(--crit-soft);color:var(--crit);border-color:transparent}.chip.off i{background:var(--crit)}
+.kpis{flex:none;display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:14px 20px 0;max-width:1500px;width:100%;margin:0 auto}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 14px;box-shadow:var(--shadow)}
+.kpi small{display:block;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+.kpi b{font-size:22px;font-weight:600;line-height:1.25}
+.shell{flex:1;min-height:0;display:grid;grid-template-columns:330px minmax(0,1fr) 310px;gap:0;margin:14px 20px 20px;max-width:1460px;width:calc(100% - 40px);align-self:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
+.col{min-height:0;display:flex;flex-direction:column;min-width:0}
+#lista{border-right:1px solid var(--line)}
+#det{border-left:1px solid var(--line);background:var(--soft)}
+.ph{padding:12px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;min-height:58px}
+.ph h2{margin:0;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;flex:1}
+.busca{padding:10px 12px;border-bottom:1px solid var(--line)}
+.busca input{width:100%;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--soft)}
+#contatos{overflow-y:auto;flex:1}
+.ct{display:flex;gap:11px;padding:11px 14px;border-bottom:1px solid var(--line);cursor:pointer;align-items:center;border-left:3px solid transparent}
+.ct:hover{background:var(--soft)}.ct.sel{background:var(--accent-soft);border-left-color:var(--accent)}
+.av{flex:none;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-weight:600;color:#fff;font-size:15px}
+.av.g{width:56px;height:56px;font-size:21px}
+.ct .t{flex:1;min-width:0}.ct .l1{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.ct b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ct time{color:var(--muted);font-size:12px;white-space:nowrap}
+.ct .p{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pill{display:inline-block;font-size:11px;font-weight:600;border-radius:99px;padding:1px 8px;background:var(--ok-soft);color:var(--ok);margin-left:6px;vertical-align:1px}
+.pill.n{background:var(--soft);color:var(--muted);border:1px solid var(--line)}
+.vazio{margin:auto;color:var(--muted);text-align:center;padding:36px 24px;max-width:340px}
+.vazio b{display:block;color:var(--ink);margin-bottom:4px;font-size:15px}
+.vazio a{color:var(--accent)}
+#chead{display:flex;align-items:center;gap:12px}
+#chead .voltar,#chead .info{display:none;border:0;background:none;font-size:20px;cursor:pointer;padding:4px 8px;color:var(--muted)}
+#chead b{display:block;font-weight:600}#chead small{color:var(--muted)}
+#msgs{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:3px;background:var(--bg);position:relative}
+.dia{align-self:center;color:var(--muted);font-size:12px;font-weight:500;padding:3px 12px;border-radius:99px;background:var(--surface);border:1px solid var(--line);margin:12px 0 6px}
+.m{max-width:min(600px,80%);padding:7px 11px 5px;border-radius:12px;background:var(--them);border:1px solid var(--line);overflow-wrap:anywhere;box-shadow:var(--shadow)}
+.m.eu{align-self:flex-end;background:var(--me);border-color:transparent}
+.m.t{margin-top:7px}
+.m .h{font-size:11px;color:var(--muted);text-align:right;margin-top:1px}
+.m img.mid{max-width:100%;max-height:320px;border-radius:8px;display:block;cursor:zoom-in}
+.m img.fig{width:120px;height:120px;object-fit:contain}
+.m video{max-width:100%;max-height:320px;border-radius:8px}
+.m audio{width:min(300px,100%);height:38px}
+.doc{display:flex;gap:11px;align-items:center;min-width:240px;padding:4px 0}
+.doc .ic{flex:none;width:38px;height:44px;border-radius:6px;background:var(--crit-soft);color:var(--crit);display:grid;place-items:center;font-size:11px;font-weight:700}
+.doc .n{font-weight:600;overflow-wrap:anywhere;line-height:1.3}.doc small{color:var(--muted)}
+.acoes a,.acoes button{display:inline-block;margin:4px 12px 0 0;font-size:13px;font-weight:600;color:var(--accent);text-decoration:none;background:none;border:0;padding:0;cursor:pointer}
+.acoes a:hover,.acoes button:hover{text-decoration:underline}
+.res{margin-top:8px;padding:10px 12px;border-radius:8px;background:var(--soft);border:1px solid var(--line);font-size:13px}
+.res h4{margin:8px 0 3px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}.res h4:first-child{margin-top:0}
+.res ul{margin:0;padding-left:18px}.res p{margin:2px 0}
+.erro-mid{color:var(--crit);font-size:13px}
+#mais{align-self:center;border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:4px 14px;cursor:pointer;font-size:13px;color:var(--muted);margin-bottom:6px}
+#novas{position:sticky;bottom:6px;align-self:center;border:0;background:var(--accent);color:var(--accent-ink);border-radius:99px;padding:5px 14px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+#comp{border-top:1px solid var(--line);padding:10px 14px;background:var(--surface)}
+#arq{display:flex;align-items:center;gap:8px;font-size:13px;background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:5px 10px;margin-bottom:8px}
+#arq span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#arq button{border:0;background:none;color:var(--crit);cursor:pointer;font-weight:600}
+#cx{display:flex;gap:8px;align-items:flex-end}
+#cx textarea{flex:1;resize:none;max-height:140px;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:var(--soft)}
+.ib{flex:none;width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-size:17px;color:var(--muted)}
+.ib:hover{background:var(--soft)}
+#env{flex:none;height:40px;padding:0 18px;border:0;border-radius:10px;background:var(--accent);color:var(--accent-ink);font-weight:600;cursor:pointer}
+#env:disabled{opacity:.55;cursor:wait}
+.nota{font-size:12px;color:var(--muted);margin-top:6px}
+#dbody{overflow-y:auto;flex:1;padding:18px 16px}
+.dh{text-align:center;margin-bottom:16px}
+.dh .av{margin:0 auto}.dh h3{margin:10px 0 2px;font-size:17px}.dh .tel{color:var(--muted)}
+.dl{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:4px 12px;margin-bottom:14px}
+.dl div{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13.5px}.dl div:last-child{border:0}
+.dl span:first-child{color:var(--muted)}
+.sec{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;margin:4px 0 8px}
+details.au{background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-bottom:8px}
+details.au summary{cursor:pointer;padding:9px 12px;font-size:13px;list-style:none;display:flex;justify-content:space-between;gap:8px}
+details.au summary::-webkit-details-marker{display:none}
+details.au[open] summary{border-bottom:1px solid var(--line)}
+details.au .res{margin:0;border:0;background:none}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--crit);color:#fff;padding:9px 16px;border-radius:10px;font-size:13.5px;box-shadow:0 4px 14px rgba(0,0,0,.3);z-index:20}
+@media (max-width:1180px){
+  .shell{grid-template-columns:320px minmax(0,1fr)}
+  #det{display:none;position:fixed;inset:56px 0 0 auto;width:min(340px,100%);z-index:10;box-shadow:-8px 0 24px rgba(0,0,0,.25)}
+  body.det #det{display:flex}
+  #chead .info{display:block}
+}
+@media (max-width:760px){
+  .kpis{display:none}
+  .shell{margin:0;width:100%;border-radius:0;border-left:0;border-right:0;grid-template-columns:1fr;flex:1}
+  #conv{display:none}
+  body.abrir #lista{display:none}body.abrir #conv{display:flex}
+  #chead .voltar{display:block}
+  .top{padding:0 12px}.top .sep,.top h1{display:none}
+  .m{max-width:90%}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <img src="/img/PLACEHOLDER-LOGO.png" alt="Empresa Exemplo" onerror="this.outerHTML='<b style=&quot;font-size:20px;letter-spacing:.02em&quot;>exemplo</b>'">
+  <span class="sep"></span>
+  <h1>Atendimento WhatsApp</h1>
+  <span class="sp"></span>
+  <span class="chip" id="estado"><i></i><span>verificando…</span></span>
+  <a href="/whatsapp/">← WhatsApp</a>
+  <a href="/whatsapp/contatos/">Contatos</a>
+  <a href="/whatsapp/empresa/">Informações da empresa</a>
+  <a href="/whatsapp/api/logout" title="Encerrar sessão neste aparelho">Sair</a>
+</header>
+<section class="kpis" aria-label="Indicadores">
+  <div class="kpi"><small>Contatos cadastrados</small><b id="k1">–</b></div>
+  <div class="kpi"><small>Conversas com o assistente</small><b id="k2">–</b></div>
+  <div class="kpi"><small>Avisos na fila</small><b id="k3">–</b></div>
+  <div class="kpi"><small>Enviados hoje</small><b id="k4">–</b></div>
+</section>
+<main class="shell">
+  <aside class="col" id="lista">
+    <div class="ph"><h2>Contatos cadastrados</h2></div>
+    <div class="busca"><input id="q" type="search" placeholder="Buscar por nome, número ou mensagem" autocomplete="off" aria-label="Buscar contato"></div>
+    <div id="contatos"></div>
+  </aside>
+  <section class="col" id="conv">
+    <div class="ph" id="chead">
+      <button class="voltar" onclick="voltar()" aria-label="Voltar para a lista">←</button>
+      <div id="cav"></div>
+      <div style="flex:1;min-width:0"><b id="chn">Selecione um contato</b><small id="chs"></small></div>
+      <button class="info" onclick="document.body.classList.toggle('det')" aria-label="Detalhes do contato">ⓘ</button>
+    </div>
+    <div id="msgs"><div class="vazio"><b>Nenhuma conversa aberta</b>Escolha um contato cadastrado na lista para ver o histórico e responder.</div></div>
+    <div id="comp" hidden>
+      <div id="arq" hidden><span id="arqn"></span><button type="button" onclick="tiraAnexo()">Remover</button></div>
+      <div id="cx">
+        <button class="ib" type="button" title="Anexar arquivo" aria-label="Anexar arquivo" onclick="arquivo.click()">📎</button>
+        <input type="file" id="arquivo" hidden>
+        <textarea id="txt" rows="1" placeholder="Escreva uma mensagem" aria-label="Mensagem"></textarea>
+        <button id="env" type="button">Enviar</button>
+      </div>
+      <div class="nota">Envio imediato, fora da fila de avisos. Para vários contatos, use “Agendar mensagem”.</div>
+    </div>
+  </section>
+  <aside class="col" id="det">
+    <div class="ph"><h2>Detalhes do contato</h2></div>
+    <div id="dbody"><div class="vazio">Selecione um contato.</div></div>
+  </aside>
+</main>
+<script>
+const API = '../api/';
+const $ = id => document.getElementById(id);
+const ESC = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let CT = [], atual = null, pagina = 1, paginas = 1, TODAS = [], anexo = null, assin = '', novasFlag = false;
+const CORES = ['#1e3a8a', '#2F6690', '#7A4E9C', '#9A5B00', '#8A3B3B', '#3C6E47', '#46606E'];
+const cor = s => CORES[[...String(s)].reduce((a, c) => a + c.charCodeAt(0), 0) % CORES.length];
+const ini = n => ((n || '?').trim().split(/\s+/).slice(0, 2).map(p => p[0]).join('') || '?').toUpperCase();
+const av = (n, g) => `<div class="av ${g ? 'g' : ''}" style="background:${cor(n)}">${ESC(ini(n))}</div>`;
+const hora = ts => new Date(ts * 1000).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'});
+const dia = ts => { const d = new Date(ts * 1000), h = new Date(), o = new Date(Date.now() - 864e5);
+  return d.toDateString() === h.toDateString() ? 'Hoje' : d.toDateString() === o.toDateString() ? 'Ontem' : d.toLocaleDateString('pt-BR', {day: '2-digit', month: 'long', year: 'numeric'}); };
+const curto = ts => { if (!ts) return ''; const d = new Date(ts * 1000); return d.toDateString() === new Date().toDateString() ? hora(ts) : d.toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit'}); };
+const tam = n => !n ? '' : n > 1048576 ? (n / 1048576).toFixed(1).replace('.', ',') + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+function toast(t) { const e = document.createElement('div'); e.className = 'toast'; e.textContent = t; document.body.appendChild(e); setTimeout(() => e.remove(), 5000); }
+async function api(u, o) { const r = await fetch(API + u, o); if (r.status === 401) { location.href = '/whatsapp/entrar/?next=' + encodeURIComponent(location.pathname); throw new Error('sessão expirada'); } if ([499, 502, 503, 504, 520, 521, 522, 524].includes(r.status)) {
+    let corpo = ''; try { corpo = (await r.clone().text()).slice(0, 160).replace(/\s+/g, ' '); } catch (x) {}
+    const e = new Error('Conexão instável com o servidor');
+    e.detalhe = `status ${r.status} ${r.statusText || ''} | origem=${r.headers.get('x-origin') || 'AUSENTE (não veio do servidor Empresa Exemplo)'} | server=${r.headers.get('server') || '-'} | via=${r.headers.get('via') || '-'} | tipo=${r.headers.get('content-type') || '-'} | url=${r.url} | corpo="${corpo}"`;
+    throw e;
+  }
+  if (!r.ok) { let m = 'erro ' + r.status; try { m = (await r.json()).erro || m; } catch (e) {} throw new Error(m); } return r.json(); }
+const linkifica = t => ESC(t).replace(/(https?:\/\/[^\s<]+)/g, u => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`).replace(/\n/g, '<br>');
+function md(t) {   // markdown mínimo dos resumos: títulos, tópicos e citações
+  let h = '', lista = false;
+  for (const l of String(t || '').split('\n')) {
+    const s = l.trim(); if (!s) continue;
+    if (/^- /.test(s)) { if (!lista) { h += '<ul>'; lista = true; } h += '<li>' + ESC(s.slice(2)) + '</li>'; continue; }
+    if (lista) { h += '</ul>'; lista = false; }
+    if (/^#{1,3} /.test(s)) h += '<h4>' + ESC(s.replace(/^#+ /, '')) + '</h4>';
+    else if (/^- ?\*\*|^# /.test(s)) continue;
+    else h += '<p>' + ESC(s.replace(/^> ?/, '')) + '</p>';
+  }
+  return h + (lista ? '</ul>' : '');
+}
+
+/* ---------- indicadores / estado ---------- */
+let semConexao = false;
+function conexao(ok) { semConexao = !ok; if (!ok) { $('estado').className = 'chip off'; $('estado').lastChild.textContent = 'Conexão instável. Tentando novamente…'; } }
+async function kpis() {
+  try { const r = await api('resumo'), on = r.estado === 'open';
+    $('k1').textContent = r.contatos; $('k2').textContent = r.assistente_ativo; $('k3').textContent = r.fila; $('k4').textContent = r.enviadas_hoje;
+    $('estado').className = 'chip ' + (on ? 'on' : 'off'); $('estado').lastChild.textContent = on ? 'WhatsApp conectado' : 'WhatsApp desconectado'; semConexao = false;
+  } catch (e) { conexao(false); }
+}
+
+/* ---------- contatos ---------- */
+async function carregaContatos() {
+  try {
+    CT = await api('contatos?' + new URLSearchParams({q: $('q').value}));
+    $('contatos').innerHTML = CT.map(c => `<div class="ct ${atual && atual.id === c.id ? 'sel' : ''}" data-id="${c.id}" tabindex="0" role="button">
+      ${av(c.nome)}<div class="t"><div class="l1"><b>${ESC(c.nome)}${!c.ativo ? '<span class="pill n">descadastrado</span>' : c.assistente ? '<span class="pill">assistente</span>' : ''}</b><time>${curto(c.ts)}</time></div>
+      <div class="p">${c.previa ? (c.de_mim ? 'Você: ' : '') + ESC(c.previa) : ESC(c.tel)}</div></div></div>`).join('') ||
+      `<div class="vazio"><b>${$('q').value ? 'Nenhum resultado' : 'Nenhum contato cadastrado'}</b>${$('q').value ? 'Tente outro termo de busca.' : 'Cadastre quem vai receber avisos e conversar com o assistente em <a href="https://n8n.example.com/form/cadastrar">Cadastrar contato</a>.'}</div>`;
+    if (semConexao) { semConexao = false; kpis(); }
+  } catch (e) {
+    conexao(false);
+    if (!CT.length) $('contatos').innerHTML = '<div class="vazio"><b>Não foi possível carregar</b>' + ESC(e.message) + (e.detalhe ? '<details style="margin-top:10px;text-align:left;font-size:11.5px;word-break:break-all"><summary style="cursor:pointer">Detalhes técnicos</summary>' + ESC(e.detalhe) + '</details>' : '') + '<br><br><button class="ib" style="width:auto;padding:0 14px" onclick="carregaContatos()">Tentar novamente</button></div>';
+  }
+}
+const abreItem = e => { const c = e.target.closest('.ct'); if (c) abre(CT.find(x => x.id == c.dataset.id)); };
+$('contatos').addEventListener('click', abreItem);
+$('contatos').addEventListener('keydown', e => { if (e.key === 'Enter') abreItem(e); });
+let tq; $('q').oninput = () => { clearTimeout(tq); tq = setTimeout(carregaContatos, 250); };
+
+/* ---------- conversa ---------- */
+function abre(c) {
+  atual = c; pagina = 1; assin = ''; TODAS = []; document.body.classList.add('abrir'); document.body.classList.remove('det');
+  $('cav').innerHTML = av(c.nome); $('chn').textContent = c.nome; $('chs').textContent = c.tel;
+  $('comp').hidden = !c.ativo; $('chs').textContent = c.tel + (c.ativo ? '' : ' · descadastrado (não recebe mensagens)'); $('msgs').innerHTML = '<div class="vazio">Carregando…</div>';
+  carregaContatos(); carregaMsgs(true); detalhes(c.id);
+}
+function voltar() { document.body.classList.remove('abrir'); }
+function conteudo(m) {
+  const u = API + 'midia/' + encodeURIComponent(m.id);
+  let h = '';
+  if (m.tipo === 'imagem') h += `<a href="${u}" target="_blank" rel="noopener"><img class="mid" loading="lazy" src="${u}" alt="Imagem" onerror="this.outerHTML='<span class=erro-mid>Imagem indisponível (expirou no WhatsApp).</span>'"></a>`;
+  else if (m.tipo === 'figurinha') h += `<img class="mid fig" loading="lazy" src="${u}" alt="Figurinha" onerror="this.outerHTML='<span class=erro-mid>Figurinha indisponível.</span>'">`;
+  else if (m.tipo === 'video') h += `<video controls preload="none" src="${u}" onerror="this.outerHTML='<span class=erro-mid>Vídeo indisponível (expirou no WhatsApp).</span>'"></video>`;
+  else if (m.tipo === 'audio') h += `<audio controls preload="none" src="${u}" onerror="this.outerHTML='<span class=erro-mid>Áudio indisponível (expirou no WhatsApp).</span>'"></audio>` +
+      (m.resumo ? `<div class="acoes"><button onclick="this.parentNode.nextElementSibling.hidden=!this.parentNode.nextElementSibling.hidden">Resumo e transcrição</button></div><div class="res" hidden>${md(m.resumo)}</div>` : '');
+  else if (m.tipo === 'documento') h += `<div class="doc"><div class="ic">${ESC((m.arquivo.split('.').pop() || 'DOC').slice(0, 4).toUpperCase())}</div><div><div class="n">${ESC(m.arquivo)}</div><small>${tam(m.tamanho)}</small></div></div>
+      <div class="acoes"><a href="${u}" target="_blank" rel="noopener">Abrir</a><a href="${u}?baixar=1">Baixar</a></div>`;
+  else if (m.tipo === 'contato') h += '👤 ';
+  else if (m.tipo === 'local') h += '📍 ';
+  if (m.texto) h += `<div>${linkifica(m.texto)}</div>`;
+  return h;
+}
+function desenha(rolarFim) {
+  const box = $('msgs'), perto = box.scrollHeight - box.scrollTop - box.clientHeight < 160;
+  let ultDia = '', ultAutor = null, h = pagina < paginas ? '<button id="mais" onclick="maisAntigas()">Carregar mensagens anteriores</button>' : '';
+  for (const m of TODAS) {
+    const d = dia(m.ts); if (d !== ultDia) { h += `<div class="dia">${d}</div>`; ultDia = d; ultAutor = null; }
+    h += `<div class="m ${m.de_mim ? 'eu' : ''} ${ultAutor !== m.de_mim ? 't' : ''}">${conteudo(m)}<div class="h">${hora(m.ts)}</div></div>`; ultAutor = m.de_mim;
+  }
+  box.innerHTML = h || '<div class="vazio"><b>Sem mensagens</b>Ainda não há histórico com este contato. Envie a primeira mensagem abaixo.</div>';
+  if (rolarFim || perto) { box.scrollTop = box.scrollHeight; novasFlag = false; }
+  else if (novasFlag) { box.insertAdjacentHTML('beforeend', '<button id="novas" onclick="this.remove();$(\'msgs\').scrollTop=1e9">↓ Novas mensagens</button>'); }
+}
+async function carregaMsgs(primeira) {
+  if (!atual) return; const id = atual.id;
+  try {
+    const r = await api(`contatos/${id}/mensagens?pagina=1`);
+    if (!atual || atual.id !== id) return;
+    const novas = r.mensagens, a = novas.map(m => m.id).join();
+    if (!primeira && a === assin) return;
+    novasFlag = !primeira && assin !== '';
+    assin = a; paginas = r.paginas;
+    const antigas = TODAS.filter(m => m._p > 1), ids = new Set(novas.map(m => m.id));
+    TODAS = antigas.filter(m => !ids.has(m.id)).concat(novas.map(m => Object.assign(m, {_p: 1}))).sort((x, y) => x.ts - y.ts);
+    desenha(primeira);
+  } catch (e) { if (primeira) $('msgs').innerHTML = '<div class="vazio"><b>Não foi possível carregar</b>' + ESC(e.message) + '</div>'; }
+}
+async function maisAntigas() {
+  pagina++; const box = $('msgs'), h0 = box.scrollHeight;
+  const r = await api(`contatos/${atual.id}/mensagens?pagina=${pagina}`), ids = new Set(TODAS.map(m => m.id));
+  TODAS = TODAS.concat(r.mensagens.filter(m => !ids.has(m.id)).map(m => Object.assign(m, {_p: pagina}))).sort((x, y) => x.ts - y.ts);
+  paginas = r.paginas; desenha(false); box.scrollTop = box.scrollHeight - h0;
+}
+async function detalhes(id) {
+  try {
+    const d = await api('contatos/' + id); if (!atual || atual.id !== id) return;
+    $('dbody').innerHTML = `<div class="dh">${av(d.nome, true)}<h3>${ESC(d.nome)}</h3><div class="tel">${ESC(d.tel)}</div></div>
+      <div class="dl"><div><span>Grupo</span><span>${ESC(d.grupo)}</span></div>
+      <div><span>Assistente</span><span>${!d.ativo ? '<span class="pill n" style="margin:0">descadastrado</span>' : d.assistente ? '<span class="pill" style="margin:0">em conversa</span>' : '<span class="pill n" style="margin:0">aguardando</span>'}</span></div>
+      <div><span>Cadastrado em</span><span>${new Date(d.criado).toLocaleDateString('pt-BR')}</span></div>
+      <div><span>Áudios resumidos</span><span>${d.audios_total}</span></div></div>
+      <div class="sec">Resumos de áudio recentes</div>` +
+      (d.audios.length ? d.audios.map(a => `<details class="au"><summary><span>${new Date(a.criado).toLocaleString('pt-BR', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'})}</span><span class="muted" style="color:var(--muted)">${Math.round(a.duracao)} s</span></summary>
+        <div class="res">${md(a.resumo)}<h4>Transcrição</h4><p>${ESC(a.transcricao)}</p></div></details>`).join('')
+        : '<div class="vazio" style="padding:14px 0;margin:0;text-align:left;color:var(--muted)">Nenhum áudio resumido ainda.</div>');
+  } catch (e) { $('dbody').innerHTML = '<div class="vazio">Não foi possível carregar os detalhes.</div>'; }
+}
+
+/* ---------- envio ---------- */
+$('arquivo').onchange = e => { anexo = e.target.files[0] || null; e.target.value = ''; $('arq').hidden = !anexo; if (anexo) $('arqn').textContent = '📎 ' + anexo.name + ' (' + tam(anexo.size) + ')'; };
+function tiraAnexo() { anexo = null; $('arq').hidden = true; }
+$('txt').addEventListener('input', e => { e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 140) + 'px'; });
+$('txt').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); envia(); } });
+$('env').onclick = envia;
+async function envia() {
+  if (!atual) return; const texto = $('txt').value.trim(); if (!texto && !anexo) return;
+  const b = $('env'); b.disabled = true; b.textContent = 'Enviando…';
+  try {
+    if (anexo) { const f = new FormData(); f.append('legenda', texto); f.append('arquivo', anexo); await api(`contatos/${atual.id}/enviar-arquivo`, {method: 'POST', body: f}); tiraAnexo(); }
+    else await api(`contatos/${atual.id}/enviar`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({texto})});
+    $('txt').value = ''; $('txt').style.height = 'auto'; novasFlag = false; setTimeout(() => carregaMsgs(true), 900);
+  } catch (e) { toast('Não foi possível enviar: ' + e.message); }
+  b.disabled = false; b.textContent = 'Enviar';
+}
+
+kpis(); carregaContatos();
+setInterval(() => { if (!document.hidden) { carregaContatos(); if (atual) carregaMsgs(false); } }, 7000);
+setInterval(() => { if (!document.hidden) kpis(); }, 20000);
+</script>
+</body>
+</html>
